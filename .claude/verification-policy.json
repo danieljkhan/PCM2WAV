@@ -1,0 +1,81 @@
+{
+  "policy_name": "Mandatory Delivery Pipeline",
+  "version": "3.0",
+  "description": "모든 기술 산출물은 3-라운드 검증 체인 + 반복 정제 루프를 완료해야 커밋이 허용된다.",
+  "principle": "오케스트레이터의 자체 리뷰는 검증으로 인정하지 않는다. 반드시 3개 검증 서브에이전트가 3라운드 수행해야 한다.",
+  "required_verifiers": [
+    {
+      "id": "qa_subagent",
+      "name": "QA Sub-Agent",
+      "role": "테스트 작성",
+      "scope": "tests/",
+      "action": "신규/변경 코드에 대한 테스트 케이스 작성"
+    },
+    {
+      "id": "qc_subagent",
+      "name": "QC Sub-Agent",
+      "role": "린트/타입체크/테스트 실행",
+      "scope": "execute-only",
+      "action": "ruff check, ruff format, mypy, pytest 실행 → 결과 보고"
+    },
+    {
+      "id": "review_subagent",
+      "name": "Review Sub-Agent",
+      "role": "독립 검사 (CLAUDE.md 준수, 아키텍처, 보안)",
+      "scope": "read-only",
+      "action": "INSPECTION REPORT 작성 → PASS/WARN/BLOCK 판정"
+    }
+  ],
+  "verification_chain": {
+    "total_rounds": 3,
+    "round_sequence": ["qa_subagent", "qc_subagent", "review_subagent"],
+    "rounds": [
+      {
+        "round": 1,
+        "steps": ["QA 테스트 작성", "QC 실행", "Review 검사"],
+        "followed_by": "developer_fix",
+        "description": "초기 검증. BLOCK/WARN 발견 시 개발자 수정 후 Round 2 진행."
+      },
+      {
+        "round": 2,
+        "steps": ["QA 테스트 업데이트", "QC 재실행", "Review 재검사"],
+        "followed_by": "developer_fix",
+        "description": "Round 1 수정 확인. 잔여 이슈 수정 후 Round 3 진행."
+      },
+      {
+        "round": 3,
+        "steps": ["QA 최종 테스트", "QC 최종 실행", "Review 최종 검사"],
+        "followed_by": "orchestrator_acceptance",
+        "description": "최종 검증. BLOCK 0건이어야 수락. BLOCK 잔존 시 Round 1부터 재시작."
+      }
+    ],
+    "acceptance_condition": "Round 3에서 QC PASS + Review BLOCK 0건",
+    "restart_condition": "Round 3에서 BLOCK 잔존 시 Round 1부터 전체 재시작"
+  },
+  "delivery_pipeline": [
+    {"step": 1, "name": "implementation", "description": "서브에이전트가 배정된 스코프 내에서 코드 작성"},
+    {"step": 2, "name": "verification_round_1", "agents": ["qa_subagent", "qc_subagent", "review_subagent"], "description": "QA → QC → Review 1차 검증"},
+    {"step": 3, "name": "developer_fix_1", "description": "Round 1 BLOCK/WARN 수정"},
+    {"step": 4, "name": "verification_round_2", "agents": ["qa_subagent", "qc_subagent", "review_subagent"], "description": "QA → QC → Review 2차 검증 (수정 확인)"},
+    {"step": 5, "name": "developer_fix_2", "description": "Round 2 잔여 이슈 수정"},
+    {"step": 6, "name": "verification_round_3", "agents": ["qa_subagent", "qc_subagent", "review_subagent"], "description": "QA → QC → Review 3차 최종 검증"},
+    {"step": 7, "name": "orchestrator_acceptance", "condition": "Round 3 BLOCK 0건일 때만 수락"},
+    {"step": 8, "name": "iterative_polish_loop", "description": "변경 파일 전수 검토 → 수정 → QC 재실행, 2 consecutive 0-fix cycles로 종료"},
+    {"step": 9, "name": "commit", "condition": "polish loop 종료 조건 충족 후에만 커밋 허용"}
+  ],
+  "polish_loop": {
+    "iterations_per_cycle": 10,
+    "termination_condition": "2 consecutive cycles with 0 fixes (20 consecutive 0-fix iterations)",
+    "scope": "all changed files in the current work session",
+    "qc_checks_per_iteration": ["ruff check .", "ruff format --check .", "mypy pcm2wav/", "pytest tests/ -v"]
+  },
+  "enforcement": {
+    "method": "claude_code_hook",
+    "trigger": "git commit / git push 명령 차단",
+    "reset_on": "Edit 또는 Write 도구로 파일 수정 시 검증 상태 초기화"
+  },
+  "exceptions": {
+    "docs_only_commits": true,
+    "description": "문서 전용/워크로그 전용 커밋(docs/, .claude/ 하위 파일만 포함)은 검증 체인과 polish loop 모두 면제."
+  }
+}
