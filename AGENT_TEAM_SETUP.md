@@ -3,7 +3,7 @@
 > Purpose: PCM to WAV 변환 GUI 도구 개발.
 > All work must produce correct, well-tested conversion logic and a clean Tkinter GUI.
 
-This setup applies to `E:\Python_vscode\PCM2WAV`.
+This setup applies to the project root directory (`.`).
 
 ## Operating Model
 
@@ -146,7 +146,7 @@ All sub-agents run on **Claude Opus 4.6 exclusively**. No lower-tier models (Son
 
 ## Quick Start
 
-1. Open `E:\Python_vscode\PCM2WAV` in VS Code or terminal.
+1. Open the project root directory in VS Code or terminal.
 2. Start a Claude Code session.
 3. The main session acts as orchestrator — give it the goal.
 4. The orchestrator reads the development plan, identifies priorities, and spawns sub-agents.

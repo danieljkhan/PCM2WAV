@@ -3,6 +3,7 @@
 ## 작업 요약
 
 PCM2WAV 프로젝트의 전체 인프라를 구축하고 GitHub 레포를 개설했다.
+이후 문서 내 절대경로를 상대경로로 수정하고 정합성 검증을 완료했다.
 
 ## 커밋 기록
 
@@ -20,6 +21,17 @@ PCM2WAV 프로젝트의 전체 인프라를 구축하고 GitHub 레포를 개설
   - `.gitignore` 작성
 - **검증 결과**: 초기 설정 커밋 (코드 없음, 검증 대상 없음)
 - **GitHub**: https://github.com/danieljkhan/PCM2WAV (public, master 브랜치)
+
+### (커밋 예정) — [docs] 절대경로를 상대경로로 수정
+
+- **변경 요약**:
+  - `AGENT_TEAM_SETUP.md`: `E:\Python_vscode\PCM2WAV` → 프로젝트 루트 상대경로 (`.`) (2곳)
+  - `plans/enchanted-inventing-whisper.md`: `E:\Python_vscode\PCM2WAV\` → `PCM2WAV/` (프로젝트 구조 트리)
+  - `plans/enchanted-inventing-whisper.md`: `E:\output\wav_files` → `./output/wav_files` (GUI 목업)
+- **검증 결과**: 정합성 딥 리뷰 2싸이클(20회) 수행, 수정 필요 0건으로 종료 조건 충족
+  - 잔여 절대경로: 0건
+  - 파일 간 상호참조 불일치: 0건
+  - GUI 목업 정렬 깨짐: 0건
 
 ## 수행 작업 상세
 
@@ -64,3 +76,4 @@ mungi 프로젝트의 `.claude/` 구조를 참조하여 PCM2WAV에 맞게 적용
 ## 업데이트 시각
 
 2026-03-17 KST
+- 절대경로→상대경로 수정 + 정합성 검증: 2026-03-17 KST
