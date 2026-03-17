@@ -176,9 +176,7 @@ def main() -> None:
             sys.exit(2)
 
     except Exception as exc:
-        sys.stderr.write(
-            f"[VERIFICATION HOOK] 예상치 못한 오류 — 안전을 위해 차단합니다: {exc}\n"
-        )
+        sys.stderr.write(f"[VERIFICATION HOOK] 예상치 못한 오류 — 안전을 위해 차단합니다: {exc}\n")
         sys.exit(2)
 
 
