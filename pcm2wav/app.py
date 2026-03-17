@@ -5,6 +5,7 @@ Tkinter 기반 GUI 앱. 스레드 안전 아키텍처 (queue.Queue + root.after 
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import queue
 import threading
@@ -94,6 +95,27 @@ def _build_output_path(
         if not numbered_path.exists():
             return numbered_path
         counter += 1
+
+
+def _is_directory_writable(directory: Path) -> bool:
+    """디렉터리에 파일을 쓸 수 있는지 확인.
+
+    임시 파일을 생성/삭제하여 실제 쓰기 가능 여부를 검증한다.
+
+    Args:
+        directory: 검사할 디렉터리 경로.
+
+    Returns:
+        쓰기 가능하면 True.
+    """
+    test_path = directory / ".pcm2wav_write_test.tmp"
+    try:
+        test_path.write_bytes(b"t")
+    except OSError:
+        return False
+    with contextlib.suppress(OSError):
+        test_path.unlink()
+    return True
 
 
 class Pcm2WavApp:
@@ -493,6 +515,27 @@ class Pcm2WavApp:
             if skipped_count > 0:
                 msg += f" ({skipped_count}개 파일 건너뜀)"
             messagebox.showinfo("알림", msg)
+            return
+
+        # Check output directories are writable
+        unwritable_dirs: list[Path] = []
+        checked_dirs: set[Path] = set()
+        for _, out_path in file_pairs:
+            parent = out_path.parent
+            if parent not in checked_dirs:
+                checked_dirs.add(parent)
+                if not _is_directory_writable(parent):
+                    unwritable_dirs.append(parent)
+
+        if unwritable_dirs:
+            dirs_text = "\n".join(str(d) for d in unwritable_dirs)
+            messagebox.showerror(
+                "쓰기 오류",
+                f"다음 출력 폴더에 파일을 쓸 수 없습니다:\n{dirs_text}\n\n"
+                "Windows 보안 설정(제어된 폴더 액세스)이 쓰기를\n"
+                "차단하고 있을 수 있습니다.\n"
+                "다른 출력 폴더를 선택해주세요.",
+            )
             return
 
         # Reset statuses for files to be converted

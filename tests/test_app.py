@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import tkinter as tk
-from typing import TYPE_CHECKING
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from pcm2wav import __version__
-from pcm2wav.app import Pcm2WavApp
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pcm2wav.app import Pcm2WavApp, _is_directory_writable
 
 
 def _tk_available() -> bool:
@@ -145,3 +143,26 @@ class TestStateTransitions:
         # Convert to string for comparison regardless of enum vs string
         state_str = str(state).upper()
         assert "IDLE" in state_str
+
+
+# ---------------------------------------------------------------------------
+# Directory writable check
+# ---------------------------------------------------------------------------
+
+
+class TestDirectoryWritable:
+    """Validates _is_directory_writable() helper function."""
+
+    def test_writable_directory_returns_true(self, tmp_path: Path) -> None:
+        """Writable directory should return True."""
+        assert _is_directory_writable(tmp_path) is True
+
+    def test_nonexistent_directory_returns_false(self, tmp_path: Path) -> None:
+        """Non-existent directory should return False."""
+        nonexistent = tmp_path / "does_not_exist"
+        assert _is_directory_writable(nonexistent) is False
+
+    def test_unwritable_directory_returns_false(self, tmp_path: Path) -> None:
+        """Unwritable directory should return False."""
+        with patch.object(Path, "write_bytes", side_effect=OSError("blocked")):
+            assert _is_directory_writable(tmp_path) is False
