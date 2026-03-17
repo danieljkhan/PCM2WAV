@@ -157,11 +157,12 @@ def convert_pcm_to_wav(
     변환 파이프라인:
     1. 입력 파일 존재/읽기 권한 검증
     2. validate_pcm_file()로 사전 검증 (hard error 시 즉시 실패)
-    3. wave.open()으로 출력 파일 생성
-    4. WAV 파라미터 설정
-    5. 청크 루프 (바이트 스왑, 부호 변환, progress callback)
-    6. wave 파일 close
-    7. ConversionResult 반환
+    3. 출력 디렉터리 생성 (존재하지 않으면 재귀 생성)
+    4. wave.open()으로 출력 파일 생성
+    5. WAV 파라미터 설정
+    6. 청크 루프 (바이트 스왑, 부호 변환, progress callback)
+    7. wave 파일 close
+    8. ConversionResult 반환
 
     Args:
         pcm_path: 입력 PCM 파일 경로.
@@ -195,7 +196,10 @@ def convert_pcm_to_wav(
         for w in warnings:
             logger.warning(w)
 
-        # 3-4. WAV 출력 파일 생성 + 파라미터 설정
+        # 3. 출력 디렉터리 생성
+        wav_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 4-5. WAV 출력 파일 생성 + 파라미터 설정
         needs_swap = fmt.byte_order == ByteOrder.BIG_ENDIAN and fmt.sample_width > 1
         needs_sign_convert = fmt.bit_depth == 8 and fmt.signed
         chunk_size = _aligned_chunk_size(fmt.frame_size)
@@ -209,7 +213,7 @@ def convert_pcm_to_wav(
             wav_file.setframerate(fmt.sample_rate)
             wav_file.setnframes(0)  # writeframes()가 자동 누적
 
-            # 5. 청크 루프
+            # 6. 청크 루프
             bytes_processed = 0
             while True:
                 if cancel_event and cancel_event.is_set():

@@ -446,6 +446,61 @@ class TestConvertPcmToWav:
         expected_frames = 262_144 // fmt.frame_size
         assert result.frames_written == expected_frames
 
+    def test_convert_creates_output_directory(
+        self,
+        sine_wave_pcm_16bit: Path,
+        tmp_path: Path,
+    ) -> None:
+        """Non-existent output directory should be created automatically."""
+        subdir = tmp_path / "subdir"
+        wav_path = subdir / "output.wav"
+        assert not subdir.exists()
+
+        fmt = PcmFormat(
+            sample_rate=44100,
+            bit_depth=16,
+            channels=1,
+        )
+
+        result = convert_pcm_to_wav(sine_wave_pcm_16bit, wav_path, fmt)
+
+        assert result.success is True
+        assert subdir.is_dir()
+        assert wav_path.exists()
+
+        with wave.open(str(wav_path), "rb") as wf:
+            assert wf.getnchannels() == 1
+            assert wf.getsampwidth() == 2
+            assert wf.getframerate() == 44100
+
+    def test_convert_creates_nested_output_directory(
+        self,
+        sine_wave_pcm_16bit: Path,
+        tmp_path: Path,
+    ) -> None:
+        """Multiple levels of non-existent directories should be created."""
+        nested_dir = tmp_path / "a" / "b" / "c"
+        wav_path = nested_dir / "output.wav"
+        assert not (tmp_path / "a").exists()
+
+        fmt = PcmFormat(
+            sample_rate=44100,
+            bit_depth=16,
+            channels=1,
+        )
+
+        result = convert_pcm_to_wav(sine_wave_pcm_16bit, wav_path, fmt)
+
+        assert result.success is True
+        assert nested_dir.is_dir()
+        assert wav_path.exists()
+
+        with wave.open(str(wav_path), "rb") as wf:
+            assert wf.getnchannels() == 1
+            assert wf.getsampwidth() == 2
+            assert wf.getframerate() == 44100
+            assert wf.getnframes() == 44100
+
 
 # ---------------------------------------------------------------------------
 # batch_convert
