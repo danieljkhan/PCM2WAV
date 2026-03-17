@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import queue
 import threading
 import tkinter as tk
@@ -16,11 +17,12 @@ from tkinter import filedialog, messagebox, ttk
 from typing import TYPE_CHECKING, Any
 
 import pcm2wav
+from pcm2wav.analyzer import analyze_pcm_file
 from pcm2wav.converter import batch_convert
 from pcm2wav.widgets import FileListPanel, ParameterPanel
 
 if TYPE_CHECKING:
-    from pcm2wav.models import ConversionResult, PcmFormat
+    from pcm2wav.models import ConversionResult, FormatCandidate, PcmFormat
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +142,10 @@ class Pcm2WavApp:
 
         # App state
         self._state = _AppState.IDLE
+        self._last_output_dir: Path | None = None
 
         self._build_ui()
+        self._param_panel.set_auto_detect_callback(self._on_auto_detect)
         self._bind_shortcuts()
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -316,7 +320,7 @@ class Pcm2WavApp:
         self._progressbar.grid(row=1, column=0, sticky=tk.EW)
 
     def _build_action_buttons(self) -> None:
-        """변환/취소 버튼 구성."""
+        """변환/취소/출력폴더열기 버튼 구성."""
         btn_frame = ttk.Frame(self.root)
         btn_frame.grid(
             row=4,
@@ -326,7 +330,8 @@ class Pcm2WavApp:
             pady=10,
         )
         btn_frame.columnconfigure(0, weight=1)
-        btn_frame.columnconfigure(1, weight=1)
+        btn_frame.columnconfigure(1, weight=0)
+        btn_frame.columnconfigure(2, weight=1)
 
         self._start_btn = ttk.Button(
             btn_frame,
@@ -335,12 +340,22 @@ class Pcm2WavApp:
         )
         self._start_btn.grid(row=0, column=0, sticky=tk.EW, padx=(0, 5))
 
+        self._open_folder_btn = ttk.Button(
+            btn_frame,
+            text="출력 폴더 열기",
+            command=self._open_output_folder,
+        )
+        self._open_folder_btn.grid(row=0, column=1, padx=5)
+        self._open_folder_btn.state(  # type: ignore[no-untyped-call]
+            ["disabled"],
+        )
+
         self._cancel_btn = ttk.Button(
             btn_frame,
             text="취소",
             command=self._cancel_conversion,
         )
-        self._cancel_btn.grid(row=0, column=1, sticky=tk.EW, padx=(5, 0))
+        self._cancel_btn.grid(row=0, column=2, sticky=tk.EW, padx=(5, 0))
         self._cancel_btn.state(["disabled"])  # type: ignore[no-untyped-call]
 
     def _bind_shortcuts(self) -> None:
@@ -417,6 +432,9 @@ class Pcm2WavApp:
             self._file_panel.set_enabled(False)
             self._start_btn.state(["disabled"])  # type: ignore[no-untyped-call]
             self._cancel_btn.state(["!disabled"])  # type: ignore[no-untyped-call]
+            self._open_folder_btn.state(  # type: ignore[no-untyped-call]
+                ["disabled"],
+            )
             self._enable_output_settings(False)
         elif new_state in (
             _AppState.COMPLETED,
@@ -428,6 +446,11 @@ class Pcm2WavApp:
             self._start_btn.state(["!disabled"])  # type: ignore[no-untyped-call]
             self._cancel_btn.state(["disabled"])  # type: ignore[no-untyped-call]
             self._enable_output_settings(True)
+
+            if new_state == _AppState.COMPLETED and self._last_output_dir is not None:
+                self._open_folder_btn.state(  # type: ignore[no-untyped-call]
+                    ["!disabled"],
+                )
 
             if new_state != _AppState.ERROR:
                 self.root.after(RESET_DELAY_MS, self._reset_to_idle)
@@ -468,7 +491,7 @@ class Pcm2WavApp:
         # Validate format
         try:
             fmt = self._param_panel.get_format()
-        except (ValueError, Exception) as exc:
+        except Exception as exc:
             messagebox.showerror("포맷 오류", str(exc))
             return
 
@@ -542,6 +565,10 @@ class Pcm2WavApp:
         for input_path, _ in file_pairs:
             self._file_panel.update_status(input_path, "대기 중")
 
+        self._last_output_dir = None
+        self._open_folder_btn.state(  # type: ignore[no-untyped-call]
+            ["disabled"],
+        )
         self._set_state(_AppState.CONVERTING)
         self._cancel_event.clear()
 
@@ -676,6 +703,12 @@ class Pcm2WavApp:
             fail_count = sum(1 for r in results if not r.success)
             total_count = len(results)
 
+            if success_count > 0:
+                for r in results:
+                    if r.success and r.output_path is not None:
+                        self._last_output_dir = r.output_path.parent
+                        break
+
             was_cancelled = self._cancel_event.is_set()
 
             if was_cancelled:
@@ -698,6 +731,38 @@ class Pcm2WavApp:
                 fail_count,
                 was_cancelled,
             )
+
+        elif msg_type == "analysis_complete":
+            candidates: list[FormatCandidate] = msg[1]
+            self._param_panel.set_enabled(True)
+            if candidates:
+                top = candidates[0]
+                display_name = top.preset_name or "Custom"
+                ch_label = f"{top.fmt.channels}ch"
+                messagebox.showinfo(
+                    "자동 감지 결과",
+                    f"감지 결과: {display_name}\n"
+                    f"샘플레이트: {top.fmt.sample_rate} Hz\n"
+                    f"비트깊이: {top.fmt.bit_depth}-bit\n"
+                    f"채널: {ch_label}\n"
+                    f"신뢰도: {top.confidence:.0%}",
+                )
+                self._param_panel.apply_detected_format(
+                    top.fmt,
+                    top.preset_name,
+                )
+            else:
+                messagebox.showinfo(
+                    "자동 감지 결과",
+                    "포맷을 감지할 수 없습니다.",
+                )
+            self._status_var.set("준비")
+
+        elif msg_type == "analysis_error":
+            analysis_err: str = msg[1]
+            self._param_panel.set_enabled(True)
+            messagebox.showerror("분석 오류", analysis_err)
+            self._status_var.set("준비")
 
         elif msg_type == "error":
             error_msg: str = msg[1]
@@ -729,6 +794,54 @@ class Pcm2WavApp:
         # NUMBER mode always returns a non-None path
         assert result is not None  # noqa: S101
         return result
+
+    def _on_auto_detect(self) -> None:
+        """자동 감지 버튼 클릭 핸들러.
+
+        파일 목록의 첫 번째 파일을 분석하여 포맷을 자동 감지한다.
+        분석은 별도 데몬 스레드에서 실행된다.
+        """
+        if self._file_panel.is_empty():
+            messagebox.showwarning(
+                "알림",
+                "분석할 파일이 없습니다. 먼저 파일을 추가해주세요.",
+            )
+            return
+
+        files = self._file_panel.get_files()
+        pcm_path = files[0]
+        self._status_var.set(f"분석 중: {pcm_path.name}...")
+        self._param_panel.set_enabled(False)
+
+        thread = threading.Thread(
+            target=self._analyze_thread,
+            args=(pcm_path,),
+            daemon=True,
+        )
+        thread.start()
+
+    def _analyze_thread(self, pcm_path: Path) -> None:
+        """분석 워커 스레드: PCM 파일을 분석하여 결과를 큐로 전송.
+
+        Args:
+            pcm_path: 분석할 PCM 파일 경로.
+        """
+        try:
+            candidates = analyze_pcm_file(pcm_path)
+            self.msg_queue.put(("analysis_complete", candidates))
+        except Exception as exc:
+            logger.exception("PCM 분석 오류: %s", pcm_path)
+            self.msg_queue.put(("analysis_error", str(exc)))
+
+    def _open_output_folder(self) -> None:
+        """출력 폴더를 Windows 탐색기에서 열기."""
+        if self._last_output_dir is None or not self._last_output_dir.exists():
+            messagebox.showwarning(
+                "알림",
+                "출력 폴더를 찾을 수 없습니다.",
+            )
+            return
+        os.startfile(self._last_output_dir)
 
     def _on_close(self) -> None:
         """윈도우 닫기 핸들러. 변환 중이면 확인 다이얼로그 표시."""

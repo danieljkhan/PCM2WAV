@@ -15,6 +15,7 @@ from pcm2wav.models import ByteOrder, PcmFormat
 from pcm2wav.presets import DEFAULT_PRESET_NAME, PRESETS
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ class ParameterPanel(ttk.LabelFrame):
         """
         super().__init__(parent, text="포맷 설정", padding=(10, 5))
         self._preset_names: list[str] = list(PRESETS.keys())
+        self._auto_detect_callback: Callable[[], None] | None = None
         self._build_ui()
         self._bind_events()
         self._select_preset(DEFAULT_PRESET_NAME)
@@ -89,7 +91,7 @@ class ParameterPanel(ttk.LabelFrame):
         self.columnconfigure(1, weight=1)
         self.columnconfigure(3, weight=1)
 
-        # Row 0: Preset (full width)
+        # Row 0: Preset + Auto-detect button
         ttk.Label(self, text="프리셋:").grid(
             row=0,
             column=0,
@@ -107,8 +109,20 @@ class ParameterPanel(ttk.LabelFrame):
         self._preset_combo.grid(
             row=0,
             column=1,
-            columnspan=3,
+            columnspan=2,
             sticky=tk.EW,
+            pady=2,
+        )
+        self._auto_detect_btn = ttk.Button(
+            self,
+            text="자동 감지",
+            command=self._on_auto_detect_click,
+        )
+        self._auto_detect_btn.grid(
+            row=0,
+            column=3,
+            sticky=tk.EW,
+            padx=(5, 0),
             pady=2,
         )
 
@@ -393,6 +407,9 @@ class ParameterPanel(ttk.LabelFrame):
         """
         if enabled:
             self._preset_combo.configure(state="readonly")
+            self._auto_detect_btn.state(  # type: ignore[no-untyped-call]
+                ["!disabled"],
+            )
             # Restore state based on preset selection
             name = self._preset_var.get()
             fmt = PRESETS.get(name)
@@ -402,7 +419,46 @@ class ParameterPanel(ttk.LabelFrame):
                 self._set_params_state("normal")
         else:
             self._preset_combo.configure(state="disabled")
+            self._auto_detect_btn.state(  # type: ignore[no-untyped-call]
+                ["disabled"],
+            )
             self._set_params_state("disabled")
+
+    def set_auto_detect_callback(
+        self,
+        callback: Callable[[], None],
+    ) -> None:
+        """자동 감지 버튼 콜백 등록.
+
+        Args:
+            callback: 자동 감지 버튼 클릭 시 호출할 콜백.
+        """
+        self._auto_detect_callback = callback
+
+    def _on_auto_detect_click(self) -> None:
+        """자동 감지 버튼 클릭 내부 핸들러."""
+        if self._auto_detect_callback is not None:
+            self._auto_detect_callback()
+
+    def apply_detected_format(
+        self,
+        fmt: PcmFormat,
+        preset_name: str | None,
+    ) -> None:
+        """자동 감지된 포맷을 UI에 적용.
+
+        프리셋과 매칭되면 해당 프리셋을 선택하고,
+        매칭되지 않으면 Custom을 선택하여 값을 직접 설정한다.
+
+        Args:
+            fmt: 적용할 PcmFormat.
+            preset_name: 매칭된 프리셋 이름 (없으면 None).
+        """
+        if preset_name is not None and preset_name in PRESETS:
+            self._select_preset(preset_name)
+        else:
+            self._select_preset("Custom")
+            self.set_format(fmt)
 
 
 class FileListPanel(ttk.LabelFrame):

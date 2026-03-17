@@ -146,6 +146,21 @@ class TestStateTransitions:
 
 
 # ---------------------------------------------------------------------------
+# Open folder button
+# ---------------------------------------------------------------------------
+
+
+class TestOpenFolder:
+    """Validates the open-folder button exists in the app."""
+
+    def test_open_folder_button_exists(self, app: Pcm2WavApp) -> None:
+        """The app should have an _open_folder_btn attribute."""
+        assert hasattr(app, "_open_folder_btn"), (
+            "Pcm2WavApp is missing the _open_folder_btn attribute"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Directory writable check
 # ---------------------------------------------------------------------------
 

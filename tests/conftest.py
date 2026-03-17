@@ -128,6 +128,76 @@ def frame_misaligned_pcm(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def mono_16bit_16khz_pcm(tmp_path: Path) -> Path:
+    """16-bit LE signed mono at 16000 Hz, 1-second 400 Hz sine wave.
+
+    Simulates KsponSpeech-like speech format (32000 bytes total).
+    """
+    sample_rate = 16000
+    frequency = 400.0
+    num_samples = sample_rate  # 1 second
+    amplitude = 16384  # moderate volume
+
+    samples: list[bytes] = []
+    for i in range(num_samples):
+        value = int(amplitude * math.sin(2.0 * math.pi * frequency * i / sample_rate))
+        samples.append(struct.pack("<h", value))
+
+    pcm_data = b"".join(samples)
+    path = tmp_path / "mono_16bit_16khz.pcm"
+    path.write_bytes(pcm_data)
+    return path
+
+
+@pytest.fixture()
+def stereo_16bit_44100_pcm(tmp_path: Path) -> Path:
+    """16-bit LE signed stereo at 44100 Hz, 1-second sine wave.
+
+    Both L/R channels contain the same 440 Hz sine wave (correlated).
+    Total size: 44100 * 2 channels * 2 bytes = 176400 bytes.
+    """
+    sample_rate = 44100
+    frequency = 440.0
+    num_samples = sample_rate  # 1 second
+    amplitude = 24000
+
+    samples: list[bytes] = []
+    for i in range(num_samples):
+        value = int(amplitude * math.sin(2.0 * math.pi * frequency * i / sample_rate))
+        packed = struct.pack("<h", value)
+        samples.append(packed)  # Left channel
+        samples.append(packed)  # Right channel (same = correlated)
+
+    pcm_data = b"".join(samples)
+    path = tmp_path / "stereo_16bit_44100.pcm"
+    path.write_bytes(pcm_data)
+    return path
+
+
+@pytest.fixture()
+def mono_8bit_unsigned_pcm(tmp_path: Path) -> Path:
+    """8-bit unsigned mono at 8000 Hz, 1-second sine wave.
+
+    Values centered around 128 (unsigned silence).
+    Total size: 8000 bytes.
+    """
+    sample_rate = 8000
+    frequency = 400.0
+    num_samples = sample_rate  # 1 second
+    amplitude = 80  # moderate volume within 0-255 range
+
+    samples: list[bytes] = []
+    for i in range(num_samples):
+        value = int(128 + amplitude * math.sin(2.0 * math.pi * frequency * i / sample_rate))
+        samples.append(struct.pack("B", max(0, min(255, value))))
+
+    pcm_data = b"".join(samples)
+    path = tmp_path / "mono_8bit_unsigned.pcm"
+    path.write_bytes(pcm_data)
+    return path
+
+
+@pytest.fixture()
 def empty_pcm(tmp_path: Path) -> Path:
     """Empty file (0 bytes)."""
     path = tmp_path / "empty.pcm"

@@ -76,6 +76,23 @@ class PcmFormat:
         return self.sample_width * self.channels
 
 
+@dataclass(frozen=True)
+class FormatCandidate:
+    """PCM 포맷 자동 감지 결과 후보.
+
+    Attributes:
+        fmt: 추천 PcmFormat.
+        confidence: 신뢰도 (0.0 ~ 1.0).
+        preset_name: 매칭되는 프리셋 이름 (없으면 None).
+        reason: 추천 근거 설명.
+    """
+
+    fmt: PcmFormat
+    confidence: float
+    preset_name: str | None = None
+    reason: str = ""
+
+
 @dataclass
 class ConversionResult:
     """단일 파일 변환 결과 (mutable -- 변환 과정에서 필드가 채워짐).
